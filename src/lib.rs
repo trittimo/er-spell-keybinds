@@ -10,8 +10,7 @@ use pelite::{
     pe64::{Pe, PeObject, PeView},
 };
 use std::{
-    collections::{HashMap, HashSet}
-    ,
+    collections::{HashMap, HashSet},
     path::Path,
     ptr::read_unaligned,
     time::{Duration, Instant},

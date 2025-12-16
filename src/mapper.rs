@@ -1,0 +1,131 @@
+use device_query::Keycode;
+use keyboard_codes::{Key, Modifier};
+
+pub fn map_key(key: &Key) -> Option<Keycode> {
+    match key {
+        Key::Escape => { Some(Keycode::Escape) }
+        Key::Enter => { Some(Keycode::Enter) }
+        Key::Tab => { Some(Keycode::Tab) }
+        Key::Backspace => { Some(Keycode::Backspace) }
+        Key::Space => { Some(Keycode::Space) }
+        Key::Insert => { Some(Keycode::Insert) }
+        Key::Delete => { Some(Keycode::Delete) }
+        Key::Home => { Some(Keycode::Home) }
+        Key::End => { Some(Keycode::End) }
+        Key::PageUp => { Some(Keycode::PageUp) }
+        Key::PageDown => { Some(Keycode::PageDown) }
+        Key::ArrowLeft => { Some(Keycode::Left) }
+        Key::ArrowUp => { Some(Keycode::Up) }
+        Key::ArrowRight => { Some(Keycode::Right) }
+        Key::ArrowDown => { Some(Keycode::Down) }
+        Key::A => { Some(Keycode::A) }
+        Key::B => { Some(Keycode::B) }
+        Key::C => { Some(Keycode::C) }
+        Key::D => { Some(Keycode::D) }
+        Key::E => { Some(Keycode::E) }
+        Key::F => { Some(Keycode::F) }
+        Key::G => { Some(Keycode::G) }
+        Key::H => { Some(Keycode::H) }
+        Key::I => { Some(Keycode::I) }
+        Key::J => { Some(Keycode::J) }
+        Key::K => { Some(Keycode::K) }
+        Key::L => { Some(Keycode::L) }
+        Key::M => { Some(Keycode::M) }
+        Key::N => { Some(Keycode::N) }
+        Key::O => { Some(Keycode::O) }
+        Key::P => { Some(Keycode::P) }
+        Key::Q => { Some(Keycode::Q) }
+        Key::R => { Some(Keycode::R) }
+        Key::S => { Some(Keycode::S) }
+        Key::T => { Some(Keycode::T) }
+        Key::U => { Some(Keycode::U) }
+        Key::V => { Some(Keycode::V) }
+        Key::W => { Some(Keycode::W) }
+        Key::X => { Some(Keycode::X) }
+        Key::Y => { Some(Keycode::Y) }
+        Key::Z => { Some(Keycode::Z) }
+        Key::D0 => { Some(Keycode::Key0) }
+        Key::D1 => { Some(Keycode::Key1) }
+        Key::D2 => { Some(Keycode::Key2) }
+        Key::D3 => { Some(Keycode::Key3) }
+        Key::D4 => { Some(Keycode::Key4) }
+        Key::D5 => { Some(Keycode::Key5) }
+        Key::D6 => { Some(Keycode::Key6) }
+        Key::D7 => { Some(Keycode::Key7) }
+        Key::D8 => { Some(Keycode::Key8) }
+        Key::D9 => { Some(Keycode::Key9) }
+        Key::Num0 => { Some(Keycode::Numpad0) }
+        Key::Num1 => { Some(Keycode::Numpad1) }
+        Key::Num2 => { Some(Keycode::Numpad2) }
+        Key::Num3 => { Some(Keycode::Numpad3) }
+        Key::Num4 => { Some(Keycode::Numpad4) }
+        Key::Num5 => { Some(Keycode::Numpad5) }
+        Key::Num6 => { Some(Keycode::Numpad6) }
+        Key::Num7 => { Some(Keycode::Numpad7) }
+        Key::Num8 => { Some(Keycode::Numpad8) }
+        Key::Num9 => { Some(Keycode::Numpad9) }
+        Key::NumMultiply => { Some(Keycode::NumpadMultiply) }
+        Key::NumAdd => { Some(Keycode::NumpadAdd) }
+        Key::NumSubtract => { Some(Keycode::NumpadSubtract) }
+        Key::NumDivide => { Some(Keycode::NumpadDivide) }
+        Key::NumDecimal => { Some(Keycode::NumpadDecimal) }
+        Key::F1 => { Some(Keycode::F1) }
+        Key::F2 => { Some(Keycode::F2) }
+        Key::F3 => { Some(Keycode::F3) }
+        Key::F4 => { Some(Keycode::F4) }
+        Key::F5 => { Some(Keycode::F5) }
+        Key::F6 => { Some(Keycode::F6) }
+        Key::F7 => { Some(Keycode::F7) }
+        Key::F8 => { Some(Keycode::F8) }
+        Key::F9 => { Some(Keycode::F9) }
+        Key::F10 => { Some(Keycode::F10) }
+        Key::F11 => { Some(Keycode::F11) }
+        Key::F12 => { Some(Keycode::F12) }
+        Key::F13 => { Some(Keycode::F13) }
+        Key::F14 => { Some(Keycode::F14) }
+        Key::F15 => { Some(Keycode::F15) }
+        Key::F16 => { Some(Keycode::F16) }
+        Key::F17 => { Some(Keycode::F17) }
+        Key::F18 => { Some(Keycode::F18) }
+        Key::F19 => { Some(Keycode::F19) }
+        Key::F20 => { Some(Keycode::F20) }
+        Key::F21 => { None }
+        Key::F22 => { None }
+        Key::F23 => { None }
+        Key::F24 => { None }
+        Key::CapsLock => { Some(Keycode::CapsLock) }
+        Key::NumLock => { None }
+        Key::ScrollLock => { None }
+        Key::Pause => { None }
+        Key::Apps => { None }
+        Key::Sleep => { None }
+        Key::MediaPlayPause => { None }
+        Key::MediaStop => { None }
+        Key::MediaNext => { None }
+        Key::MediaPrevious => { None }
+        Key::VolumeUp => { None }
+        Key::VolumeDown => { None }
+        Key::VolumeMute => { None }
+        Key::BrowserBack => { None }
+        Key::BrowserForward => { None }
+        Key::BrowserRefresh => { None }
+        Key::BrowserHome => { None }
+    }
+}
+
+pub fn map_modifier(modifier: &Modifier) -> (Keycode, Option<Keycode>) {
+    match modifier {
+        Modifier::Alt => { (Keycode::LAlt, Some(Keycode::RAlt)) }
+        Modifier::Control => { (Keycode::LControl, Some(Keycode::RControl)) }
+        Modifier::Shift => { (Keycode::LShift, Some(Keycode::RShift)) }
+        Modifier::Meta => { (Keycode::LMeta, Some(Keycode::RMeta)) }
+        Modifier::LeftAlt => { (Keycode::LAlt, None) }
+        Modifier::RightAlt => { (Keycode::RAlt, None) }
+        Modifier::LeftControl => { (Keycode::LControl, None) }
+        Modifier::RightControl => { (Keycode::RControl, None) }
+        Modifier::LeftShift => { (Keycode::LShift, None) }
+        Modifier::RightShift => { (Keycode::RShift, None) }
+        Modifier::LeftMeta => { (Keycode::LMeta, None) }
+        Modifier::RightMeta => { (Keycode::RMeta, None) }
+    }
+}

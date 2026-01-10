@@ -43,11 +43,19 @@ const GAME_DATA_MAN_PATTERN_STR: &str = "48 8B 05 ? ? ? ? 48 85 C0 74 05 48 8B 4
 
 const OFFSET: usize = 3;
 const ADDITIONAL: usize = 7;
+const DEFAULT_CYCLE_DEBOUNCE_MILLISECONDS: u64 = 200;
 
+#[derive(Clone, Copy)]
 enum Action {
     SetMemorySlot(u8),
     CycleBack,
+    CycleForward,
     NoOp,
+}
+
+#[derive(Clone)]
+pub struct OtherSettings {
+    pub cycle_debouce_milliseconds: u64
 }
 
 fn get_pe_view() -> PeView<'static> {
@@ -140,17 +148,17 @@ fn config_key_to_action(key: &String) -> Action {
             Action::SetMemorySlot(slot)
         }
         None => {
-            if key.contains("cycle") {
+            if key.contains("cycle_back") {
                 return Action::CycleBack;
-            };
+            } else if key.contains("cycle_forward") {
+                return Action::CycleForward;
+            }
             Action::NoOp
         }
     }
 }
 
-fn read_config() -> HashMap<Shortcut, Action> {
-    let config = ini!(&(get_dll_path() + "\\spell_keybinds.ini"));
-
+fn read_keybinds_config(config: &HashMap<String, HashMap<String, Option<String>>>) -> HashMap<Shortcut, Action> {
     let config: HashMap<Shortcut, Action> = config["keybinds"].iter()
         .map(|(k, v)| { (k, parse_input(&v.clone().unwrap_or(String::new()))) })
         .filter(|kv| kv.1.is_ok())
@@ -162,6 +170,24 @@ fn read_config() -> HashMap<Shortcut, Action> {
 
     config
 }
+
+fn read_other_settings_config(config: &HashMap<String, HashMap<String, Option<String>>>) -> OtherSettings {
+    let Some(settings_map) = config.get("settings") else {
+        return OtherSettings { cycle_debouce_milliseconds: DEFAULT_CYCLE_DEBOUNCE_MILLISECONDS };
+    };
+    OtherSettings {
+        cycle_debouce_milliseconds: settings_map.get("cycle_debounce_milliseconds")
+                                                .and_then(|v| v.as_deref())
+                                                .and_then(|s| s.parse::<u64>().ok())
+                                                .unwrap_or(DEFAULT_CYCLE_DEBOUNCE_MILLISECONDS)
+    }
+}
+
+// fn set_equipment_slot(game_data_man: &mut GameDataMan, slot_index: u8) {
+//     let equip_inventory_ptr = game_data_man.main_player_game_data.equipment.equip_inventory_data.as_ptr();
+//     let equipped_inventory = unsafe { &mut *equip_inventory_ptr };
+//     let last_slot = equipped_inventory
+// }
 
 fn set_memory_slot(game_data_man: &mut GameDataMan, slot_index: u8) {
     let equipped_magic_ptr = game_data_man.main_player_game_data.equipment.equip_magic_data.as_ptr();
@@ -179,16 +205,36 @@ fn set_memory_slot(game_data_man: &mut GameDataMan, slot_index: u8) {
     equipped_magic.selected_slot = slot_index as i32;
 }
 
+fn forward_cycle_memory_slot(game_data_man: &mut GameDataMan) {
+    let equipped_magic_ptr = game_data_man.main_player_game_data.equipment.equip_magic_data.as_ptr();
+    let equipped_magic = unsafe { &mut *equipped_magic_ptr };
+
+    let last_slot: i32 = (equipped_magic.entries.iter()
+        .filter(|e| e.param_id > 1)
+        .count() - 1)
+        .try_into()
+        .unwrap();
+
+    let next_slot = equipped_magic.selected_slot + 1;
+
+    if next_slot > last_slot {
+        equipped_magic.selected_slot = 0 as i32;
+        return;
+    }
+
+    equipped_magic.selected_slot = next_slot;
+}
+
 fn back_cycle_memory_slot(game_data_man: &mut GameDataMan) {
     let equipped_magic_ptr = game_data_man.main_player_game_data.equipment.equip_magic_data.as_ptr();
     let equipped_magic = unsafe { &mut *equipped_magic_ptr };
 
     let previous_slot = equipped_magic.selected_slot - 1;
-    let last_slot = equipped_magic.entries.iter()
-        .filter(|e| e.param_id > 1)
-        .count() - 1;
 
     if previous_slot < 0 {
+        let last_slot = equipped_magic.entries.iter()
+            .filter(|e| e.param_id > 1)
+            .count() - 1;
         equipped_magic.selected_slot = last_slot as i32;
         return;
     }
@@ -216,7 +262,7 @@ fn cartesian_product(keycodes: Vec<HashSet<Keycode>>) -> Vec<HashSet<Keycode>> {
     product
 }
 
-fn expand_combinations(key: Keycode, modifiers: Vec<Modifier>, action: &Action) -> Vec<(HashSet<Keycode>, &Action)> {
+fn expand_combinations(key: Keycode, modifiers: Vec<Modifier>, action: Action) -> Vec<(HashSet<Keycode>, Action)> {
     if modifiers.is_empty() {
         let mut set = HashSet::new();
         set.insert(key);
@@ -271,10 +317,14 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
             .expect("Timeout waiting for system init");
 
         let device_state = DeviceState::new();
-        let config = read_config();
+
+        let config = ini!(&(get_dll_path() + "\\spell_keybinds.ini"));
+        let other_settings_config = read_other_settings_config(&config);
+        let keybinds_config = read_keybinds_config(&config);
 
         let mut last_cycle_back_run = Instant::now();
-        let cycle_back_rebound = Duration::from_millis(50);
+        let mut last_cycle_forward_run = Instant::now();
+        let cycle_rebound = Duration::from_millis(other_settings_config.cycle_debouce_milliseconds);
 
         let mut last_hud_update_run = Instant::now();
         let hud_update_rebound = Duration::from_secs(3);
@@ -282,6 +332,16 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
         let mut is_hud_restored = true;
 
         let cs_task = unsafe { CSTaskImp::instance().unwrap() };
+
+        let mut keybindings = keybinds_config.iter()
+                    .map(|(s, a)| (s.key, s.modifiers.clone(), a.clone()))
+                    .map(|(k, m, a)| (map_key(&k), m, a))
+                    .filter(|kma| kma.0.is_some())
+                    .map(|(k, m, a)| (k.unwrap(), m, a))
+                    .flat_map(|(k, m, a)| expand_combinations(k, m, a))
+                    .collect::<Vec<(HashSet<Keycode>, Action)>>();
+
+        keybindings.sort_by(|(x, _), (y, _)| y.len().cmp(&x.len()));
 
         cs_task.run_recurring(
             move |_: &FD4TaskData| {
@@ -291,61 +351,74 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
                 else {
                     return
                 };
+
+                let game_data_man = get_game_data_man();
+
                 if main_player.chr_ins.module_container.data.hp <= 0 {
                     return;
                 }
 
                 if player_hud_type.is_none() {
-                    player_hud_type = Some(get_game_data_man().game_settings.hud_type);
+                    player_hud_type = Some(game_data_man.game_settings.hud_type);
                 }
 
                 let is_need_to_restore_hud = !is_hud_restored &&
                     last_hud_update_run.elapsed() > hud_update_rebound &&
-                    get_game_data_man().game_settings.hud_type != player_hud_type.unwrap();
+                    game_data_man.game_settings.hud_type != player_hud_type.unwrap();
 
                 if is_need_to_restore_hud {
-                    get_game_data_man().game_settings.hud_type = player_hud_type.unwrap();
+                    game_data_man.game_settings.hud_type = player_hud_type.unwrap();
                     is_hud_restored = true;
                 }
 
-                let mut keybindings = config.iter()
-                    .map(|(s, a)| (s.key, s.modifiers.clone(), a))
-                    .map(|(k, m, a)| (map_key(&k), m, a))
-                    .filter(|kma| kma.0.is_some())
-                    .map(|(k, m, a)| (k.unwrap(), m, a))
-                    .flat_map(|(k, m, a)| expand_combinations(k, m, a))
-                    .collect::<Vec<(HashSet<Keycode>, &Action)>>();
-
-                keybindings.sort_by(|(x, _), (y, _)| y.len().cmp(&x.len()));
-
                 let pressed_keys = device_state.get_keys();
+                let mut is_cycling = false;
 
-                for (keybinds, action) in keybindings {
+                for (keybinds, action) in &keybindings {
                     if !is_all_keybinding_keys_pressed(&keybinds, &pressed_keys) {
                         continue;
                     }
                     match action {
                         Action::SetMemorySlot(slot) => {
-                            get_game_data_man().game_settings.hud_type = HudType::On;
+                            game_data_man.game_settings.hud_type = HudType::On;
                             last_hud_update_run = Instant::now();
                             is_hud_restored = false;
 
-                            set_memory_slot(get_game_data_man(), slot - 1);
+                            set_memory_slot(game_data_man, slot - 1);
                         }
                         Action::CycleBack => {
-                            if last_cycle_back_run.elapsed() < cycle_back_rebound {
+                            is_cycling = true;
+                            if last_cycle_back_run.elapsed() < cycle_rebound {
                                 return;
                             }
-                            get_game_data_man().game_settings.hud_type = HudType::On;
+                            game_data_man.game_settings.hud_type = HudType::On;
                             last_hud_update_run = Instant::now();
                             is_hud_restored = false;
 
-                            back_cycle_memory_slot(get_game_data_man());
+                            back_cycle_memory_slot(game_data_man);
                             last_cycle_back_run = Instant::now();
                         }
-                        Action::NoOp => {}
+                        Action::CycleForward => {
+                            is_cycling = true;
+                            if last_cycle_forward_run.elapsed() < cycle_rebound {
+                                return;
+                            }
+                            game_data_man.game_settings.hud_type = HudType::On;
+                            last_hud_update_run = Instant::now();
+                            is_hud_restored = false;
+
+                            forward_cycle_memory_slot(game_data_man);
+                            last_cycle_forward_run = Instant::now();
+                        }
+                        Action::NoOp => { }
                     }
                     break;
+                }
+
+                if !is_cycling {
+                    // When no keys are pressed, it's safe to reset the debounce so the player can press the buttons rapidly
+                    last_cycle_forward_run = Instant::now() - cycle_rebound;
+                    last_cycle_back_run = Instant::now() - cycle_rebound;
                 }
             },
             CSTaskGroupIndex::FrameBegin,

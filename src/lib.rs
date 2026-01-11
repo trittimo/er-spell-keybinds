@@ -10,10 +10,7 @@ use pelite::{
     pe64::{Pe, PeObject, PeView},
 };
 use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    ptr::read_unaligned,
-    time::{Duration, Instant},
+    collections::{HashMap, HashSet}, fs::{OpenOptions}, io::{BufWriter, Write}, path::Path, ptr::{NonNull, read_unaligned}, time::{Duration, Instant}
 };
 use windows::{
     core::PCWSTR,
@@ -29,12 +26,10 @@ use windows::{
 };
 
 use eldenring::{
-    cs::{CSTaskGroupIndex, CSTaskImp, GameDataMan, HudType, WorldChrMan},
-    fd4::FD4TaskData,
-    util::system::wait_for_system_init,
+    Vector, cs::{CSTaskGroupIndex, CSTaskImp, ChrAsm, ChrAsmEquipEntries, EquipGameData, EquipInventoryData, EquipItemData, EquipMagicData, GameDataMan, HudType, ItemReplenishStateTracker, PlayerGameData, QMItemBackupVectorItem, WorldChrMan}, fd4::{FD4ParamRepository, FD4TaskData}, util::system::wait_for_system_init
 };
 
-use fromsoftware_shared::{program::Program, task::*, FromStatic};
+use fromsoftware_shared::{FromStatic, OwnedPtr, program::Program, task::*};
 
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use keyboard_codes::{parse_input, Modifier, Shortcut};
@@ -45,11 +40,34 @@ const OFFSET: usize = 3;
 const ADDITIONAL: usize = 7;
 const DEFAULT_CYCLE_DEBOUNCE_MILLISECONDS: u64 = 200;
 
+#[repr(C)]
+pub struct EquipGameDataDebug {
+    vftable: usize,
+    unk8: [u32; 22],
+    unk60: usize,
+    unk68: u32,
+    pub chr_asm: ChrAsm,
+    _pad154: u32,
+    pub equip_inventory_data: EquipInventoryData,
+    pub equip_magic_data: OwnedPtr<EquipMagicData>,
+    pub equip_item_data: EquipItemData,
+    equip_gesture_data: usize,
+    /// Tracker for the item replenishing from the chest
+    pub item_replenish_state_tracker: OwnedPtr<ItemReplenishStateTracker>,
+    pub qm_item_backup_vector: OwnedPtr<Vector<QMItemBackupVectorItem>>,
+    pub equipment_entries: ChrAsmEquipEntries,
+    unk3e0: usize,
+    unk3e8: usize,
+    pub player_game_data: NonNull<PlayerGameData>,
+    unk3f8: [u8; 0xb8],
+}
+
 #[derive(Clone, Copy)]
 enum Action {
     SetMemorySlot(u8),
     CycleBack,
     CycleForward,
+    Debug,
     NoOp,
 }
 
@@ -152,6 +170,8 @@ fn config_key_to_action(key: &String) -> Action {
                 return Action::CycleBack;
             } else if key.contains("cycle_forward") {
                 return Action::CycleForward;
+            } else if key.contains("debug") {
+                return Action::Debug;
             }
             Action::NoOp
         }
@@ -409,6 +429,31 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
 
                             forward_cycle_memory_slot(game_data_man);
                             last_cycle_forward_run = Instant::now();
+                        }
+                        Action::Debug => {
+                            // function SetWeaponEquipID(slot, weaponEquipParam)
+                            //     act(WritePointerChain, CHR_INS_BASE, SIGNED_INT, weaponEquipParam, PLAYER_GAME_DATA, EQUIP_GAME_DATA + CHR_ASM + slot)
+                            // end
+                            //--args <starting base>, <value type>, <value>, <bitOffset/pointer offset1>, <pointer offsets...>
+                            // let equipped_magic_ptr = game_data_man.main_player_game_data.equipment.equip_magic_data.as_ptr();
+                            // let equipped_magic = unsafe { &mut *equipped_magic_ptr };
+                            // let equipment: *const EquipGameData = &(game_data_man.main_player_game_data.equipment);
+                            // let equipment_view = unsafe {
+                            //     &*( equipment as *const EquipGameDataDebug )
+                            // };
+                            // let equipment = unsafe { &mut *equipment_ptr };
+                            // let _ = writeln!(debug_writer, "unk60: #{}", equipment_view.unk60 );
+                            // let _ = writeln!(debug_writer, "unk68: #{}", equipment_view.unk68 );
+                            // let _ = writeln!(debug_writer, "unk3e0: #{}", equipment_view.unk3e0 );
+                            // let _ = writeln!(debug_writer, "unk3e8: #{}", equipment_view.unk3e8 );
+                            // let Some(equip_next_weapon_param) = param_repository.get(104) else { return };
+                            let module_container_ptr = unsafe { &mut *main_player.chr_ins.module_container.as_ptr() };
+                            let action_request = &mut *module_container_ptr.action_request.as_mut();
+                            action_request.action_requests.set_change_weapon_r(true);
+
+                            // action_request.action_requests.set_change_weapon_l(true);
+                            // game_data_man.main_player_game_data.equipment.chr_asm.equipment.selected_slots.right_weapon_slot = 0;
+                            // game_data_man.main_player_game_data.equipment.chr_asm.equipment.selected_slots.right_arrow_slot = 0
                         }
                         Action::NoOp => { }
                     }

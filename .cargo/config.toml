@@ -1,0 +1,3 @@
+[alias]
+deploy = "run --package xtask --quiet deploy"
+run-game = "run --package xtask --quiet run"

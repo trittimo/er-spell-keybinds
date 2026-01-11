@@ -1,6 +1,7 @@
 mod mapper;
+mod simple_logger;
 
-use crate::mapper::{map_key, map_modifier};
+use crate::{mapper::{map_key, map_modifier}, simple_logger::SimpleLogger};
 
 use ini::ini;
 
@@ -183,12 +184,6 @@ fn read_other_settings_config(config: &HashMap<String, HashMap<String, Option<St
     }
 }
 
-// fn set_equipment_slot(game_data_man: &mut GameDataMan, slot_index: u8) {
-//     let equip_inventory_ptr = game_data_man.main_player_game_data.equipment.equip_inventory_data.as_ptr();
-//     let equipped_inventory = unsafe { &mut *equip_inventory_ptr };
-//     let last_slot = equipped_inventory
-// }
-
 fn set_memory_slot(game_data_man: &mut GameDataMan, slot_index: u8) {
     let equipped_magic_ptr = game_data_man.main_player_game_data.equipment.equip_magic_data.as_ptr();
     let equipped_magic = unsafe { &mut *equipped_magic_ptr };
@@ -318,7 +313,11 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
 
         let device_state = DeviceState::new();
 
-        let config = ini!(&(get_dll_path() + "\\spell_keybinds.ini"));
+        let dll_path = get_dll_path();
+        let log_path = Path::new(&dll_path).join(Path::new("eldenring_remapper.log"));
+        let logger = SimpleLogger::new(&log_path);
+        logger.log_debug("In remapper thread");
+        let config = ini!(&(dll_path + "\\eldenring_remapper.ini"));
         let other_settings_config = read_other_settings_config(&config);
         let keybinds_config = read_keybinds_config(&config);
 
@@ -343,8 +342,11 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
 
         keybindings.sort_by(|(x, _), (y, _)| y.len().cmp(&x.len()));
 
+        logger.log_debug("We've finished setup");
+
         cs_task.run_recurring(
             move |_: &FD4TaskData| {
+                logger.log_debug("Hey we're here!");
                 let Some(main_player) = unsafe { WorldChrMan::instance() }
                     .ok()
                     .and_then(|wcm| wcm.main_player.as_mut())

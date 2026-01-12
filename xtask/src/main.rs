@@ -69,16 +69,19 @@ fn deploy(
         &target_dir.join("eldenring_remapper.dll"),
         &config.dll_deploy_directory,
         force,
+        project_root
     )?;
     deploy_file(
         &project_root.join("eldenring_remapper.ini"),
         &config.ini_deploy_directory,
         force,
+        project_root
     )?;
     let _ = deploy_file(
         &target_dir.join("eldenring_remapper.pdb"),
         &config.dll_deploy_directory,
         force,
+        project_root
     );
 
     println!("All files deployed successfully!");
@@ -112,7 +115,7 @@ fn run(config: &Config, project_root: &Path) -> Result<(), Box<dyn std::error::E
             let script_path_absolute = script_path.canonicalize()?.display().to_string();
             Command::new("powershell.exe")
                 .args(&["-ExecutionPolicy", "Bypass", "-File", &script_path_absolute.replacen(r"\\?\", "", 1)])
-                .current_dir(script_dir)
+                .current_dir(project_root)
                 .spawn()?;
         },
         _ => {
@@ -140,9 +143,9 @@ fn get_or_create_config(root: &Path) -> Result<Config, Box<dyn std::error::Error
 
         if input.trim().to_lowercase() == "y" {
             let default = Config {
-                dll_deploy_directory: r"C:\ModEngine2\YourInstance\dlls".to_string(),
-                ini_deploy_directory: r"C:\ModEngine2\YourInstance\dlls".to_string(),
-                modengine_start_script_path: r"C:\ModEngine2\launchmod_eldenring.bat".to_string(),
+                dll_deploy_directory: r".\deploy".to_string(),
+                ini_deploy_directory: r".\deploy".to_string(),
+                modengine_start_script_path: r".\util\RunGame.ps1".to_string(),
             };
             fs::write(&path, serde_json::to_string_pretty(&default)?)?;
             println!("Created env.json. Please edit it with your actual paths.\n");
@@ -197,10 +200,14 @@ fn build_project(profile: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn deploy_file(src: &Path, dest_dir_str: &str, force: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let dest_dir = Path::new(dest_dir_str);
-    if force && !dest_dir.exists() {
-        fs::create_dir_all(dest_dir)?;
+fn deploy_file(src: &Path, dest_dir_str: &str, force: bool, project_root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let dest_dir = match Path::new(dest_dir_str) {
+        d if d.is_relative() => project_root.join(d),
+        d => d.to_path_buf()
+    };
+
+    if force && !&dest_dir.exists() {
+        fs::create_dir_all(&dest_dir)?;
     }
 
     let file_name = src.file_name().ok_or("Source path has no filename")?;
@@ -209,7 +216,7 @@ fn deploy_file(src: &Path, dest_dir_str: &str, force: bool) -> Result<(), Box<dy
         return Err(format!("Source file {:?} not found.", src).into());
     }
 
-    fs::copy(src, dest_dir.join(file_name))?;
+    fs::copy(src, &dest_dir.join(file_name))?;
     println!("  -> Copied {:?} to {}", file_name, dest_dir_str);
     Ok(())
 }

@@ -346,7 +346,6 @@ pub unsafe extern "C" fn DllMain(_hmodule: u64, reason: u32) -> bool {
 
         cs_task.run_recurring(
             move |_: &FD4TaskData| {
-                logger.log_debug("Hey we're here!");
                 let Some(main_player) = unsafe { WorldChrMan::instance() }
                     .ok()
                     .and_then(|wcm| wcm.main_player.as_mut())

@@ -21,7 +21,6 @@ fn main() {
 }
 
 fn try_main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Context & Arguments
     let args: Vec<String> = env::args().collect();
     let command = args.get(1).map(String::as_str).unwrap_or("deploy");
 
@@ -32,17 +31,15 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let xtask_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let project_root = xtask_dir.parent().ok_or("Could not find project root")?;
 
-    // 2. Configuration Phase
     let config = get_or_create_config(project_root)?;
 
-    // Execute command
     match command {
         "deploy" => {
             deploy(profile, project_root, &config, force)?;
         }
         "run" => {
             deploy(profile, project_root, &config, force)?;
-            run(&config)?;
+            run(&config, project_root)?;
         }
         _ => {
             eprintln!("Unknown command '{}'", command);
@@ -59,15 +56,12 @@ fn deploy(
     config: &Config,
     force: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // 3. Validation Phase
     if !force {
         validate_paths(config)?;
     }
 
-    // 4. Build Phase
     build_project(profile)?;
 
-    // 5. Deployment Phase
     println!("Deploying artifacts...");
     let target_dir = project_root.join("target").join(profile);
 
@@ -81,18 +75,28 @@ fn deploy(
         &config.ini_deploy_directory,
         force,
     )?;
+    let _ = deploy_file(
+        &target_dir.join("eldenring_remapper.pdb"),
+        &config.dll_deploy_directory,
+        force,
+    );
 
     println!("All files deployed successfully!");
     Ok(())
 }
 
-fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+fn run(config: &Config, project_root: &Path) -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "Launching game via script: '{}'",
         &config.modengine_start_script_path
     );
 
     let script_path = Path::new(&config.modengine_start_script_path);
+    let script_path = if script_path.is_relative() {
+        project_root.join(script_path)
+    } else {
+        script_path.to_path_buf()
+    };
 
     if !script_path.exists() {
         return Err(format!(
@@ -102,20 +106,22 @@ fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
 
-    // Extract the script's directory
     let script_dir = script_path.parent().ok_or("Could not determine script directory")?;
-
-    // Construct the PowerShell command
-    let powershell_command = format!(
-        "Start-Process -FilePath '{}' -WorkingDirectory '{}'",
-        script_path.display(),
-        script_dir.display()
-    );
-
-    // Execute PowerShell
-    Command::new("powershell")
-        .args(&["-Command", &powershell_command])
-        .spawn()?;
+    match script_path.extension() {
+        Some(ext) if ext == "ps1" => {
+            let script_path_absolute = script_path.canonicalize()?.display().to_string();
+            Command::new("powershell.exe")
+                .args(&["-ExecutionPolicy", "Bypass", "-File", &script_path_absolute.replacen(r"\\?\", "", 1)])
+                .current_dir(script_dir)
+                .spawn()?;
+        },
+        _ => {
+            let powershell_command = format!("Start-Process -FilePath '{}' -WorkingDirectory '{}'", script_path.display(), script_dir.display());
+            Command::new("powershell")
+                .args(&["-Command", &powershell_command])
+                .spawn()?;
+        }
+    }
 
     println!("Game process started, working from directory: {}", script_dir.display());
     Ok(())
